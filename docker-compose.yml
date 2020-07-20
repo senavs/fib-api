@@ -1,0 +1,70 @@
+version: '3'
+
+services:
+
+  mysql:
+    container_name: fib-mysql
+    image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: toor
+      MYSQL_DATABASE: FIB_API
+    ports:
+      - 3306:3306
+
+  rabbitmq:
+    container_name: fib-rabbitmq
+    image: rabbitmq:3-management
+    ports:
+      - 5672:5672
+      - 15672:15672
+
+  api:
+    container_name: fib-api
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: fib-api
+    environment:
+      GUNICORN_BIND: 0.0.0.0:5000
+      GUNICORN_WORKERS: 1
+      GUNICORN_RELOAD: 'true'
+      GUNICORN_TIMEOUT: 300
+      GUNICORN_GRACEFUL_TIMEOUT: 300
+      GUNICORN_LOGLEVEL: info
+      CELERY_RESULT_BACKEND: rpc://
+      CELERY_BROKER_URL: amqp://rabbitmq/
+      URI_DATABASE: mysql+mysqldb://root:toor@mysql:3306/FIB_API
+    ports:
+      - 8080:5000
+    volumes:
+      - ./api:/code
+    depends_on:
+      - mysql
+      - rabbitmq
+
+  worker01:
+    image: fib-api
+    container_name: fib-worker01
+    command: celery -A project.tasks worker --loglevel=info
+    environment:
+      CELERY_RESULT_BACKEND: rpc://
+      CELERY_BROKER_URL: amqp://rabbitmq/
+      URI_DATABASE: mysql+mysqldb://root:toor@mysql:3306/FIB_API
+    volumes:
+      - ./api:/code
+    depends_on:
+      - mysql
+      - rabbitmq
+      - api
+
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: fib-nginx
+    volumes:
+      - ./nginx:/etc/nginx/conf.d
+    ports:
+      - 80:80
+    depends_on:
+      - api
