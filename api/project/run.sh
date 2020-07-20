@@ -1,0 +1,1 @@
+gunicorn -c project/wsgi.py -k uvicorn.workers.UvicornWorker project:app
